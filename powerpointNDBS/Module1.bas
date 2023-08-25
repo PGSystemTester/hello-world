@@ -1,204 +1,182 @@
 Private Declare PtrSafe Function WaitMessage Lib "user32" () As Long
 
+Public Const getStrSeparator1 = "->"
+
 Sub importPPTFunction()
-Dim filename1 As String, singlefilename As String
-Dim dividerColor As Long, layoutColor As Long
-Dim srtMoveUp As Long, topLimit As Long
-Dim dividerSlideNumber As Long
+    Dim filename1 As String, singlefilename As String
+    Dim dividerColor As Long, layoutColor As Long, _
+    srtMoveUp As Long, topLimit As Long, dividerSlideNumber As Long
+    Dim fso As Object
+    
+    Set fso = CreateObject("Scripting.FileSystemObject")
+    
+    topLimit = -10
+    
+    selectLayoutUserForm.MoveupTextBox = srtMoveUp
+    selectLayoutUserForm.ToplimitTextBox = topLimit
+    
+    selectLayoutUserForm.Show vbModeless 'show UF
 
-Dim fso As Object
-
-Set fso = CreateObject("Scripting.FileSystemObject")
-
-srtMoveUp = 0
-''srtMoveUp = 0
-topLimit = -10
-
-selectLayoutUserForm.MoveupTextBox = srtMoveUp
-selectLayoutUserForm.ToplimitTextBox = topLimit
-
-selectLayoutUserForm.Show vbModeless 'show UF
-
-Do While selectLayoutUserForm.Visible = True
-  DoEvents
-Loop
+    Do While selectLayoutUserForm.Visible = True
+      DoEvents
+    Loop
 
 
-dividerColor = selectLayoutUserForm.DividerLayoutComboBox1.ListIndex + 1
-layoutColor = selectLayoutUserForm.ColorFooterComboBox1.ListIndex + 1
+    dividerColor = selectLayoutUserForm.DividerLayoutComboBox1.ListIndex + 1
+    layoutColor = selectLayoutUserForm.ColorFooterComboBox1.ListIndex + 1
+    dividerSlideNumber = CLng(Split(selectLayoutUserForm.DividerLayoutComboBox1.Text, getStrSeparator1)(1))
 
-dividerSlideNumber = CLng(Split(selectLayoutUserForm.DividerLayoutComboBox1.Text, getStrSeparator1)(1))
 
+    '--- title and paragraph offset ---
+    srtMoveUp = CLng(selectLayoutUserForm.MoveupTextBox)
+    topLimit = CLng(selectLayoutUserForm.ToplimitTextBox)
+    
+    '-----------------------
 
-'--- title and paragraph offset ---
-srtMoveUp = CLng(selectLayoutUserForm.MoveupTextBox)
-topLimit = CLng(selectLayoutUserForm.ToplimitTextBox)
+    Unload selectLayoutUserForm
 
-'-----------------------
+    filename1 = ShowFileDialog
 
-Unload selectLayoutUserForm
-
-filename1 = ShowFileDialog
-
-If filename1 = "" Then Exit Sub
+    If filename1 = "" Then Exit Sub
 
 '----- get single file name -------
+    Dim rawFileName As String, p As Long, fileEnding As String
+    rawFileName = fso.GetFilename(filename1)
+    p = Len(rawFileName)
+    Do While Mid(rawFileName, p, 1) <> "."
+        p = p - 1
+    Loop
+    fileEnding = Mid(rawFileName, p + 1, 9)
+    
+    
+    
 
-singlefilename = Replace(Replace(fso.GetFilename(filename1), ".pptx", ""), ".ppt", "")
+singlefilename = Replace(Replace(rawFileName, ".pptx", ""), ".ppt", "")
 singlefilename = singlefilename & "-NTTDATA.pptx"
 singlefilename = ShowSaveAsDialog(singlefilename)
+Stop
 
 If singlefilename = "" Then Exit Sub
-'singlefilename = Split(filename1, "\")(UBound(Split(filename1, "\")))
-'singlefilename = Split(singlefilename, ".")(UBound(Split(singlefilename, ".")) - 1)
-'----------------------------------
 
-Call deleteAllSlides
 
-Call saveAsPPT(singlefilename)
+Dim pre As Presentation
+
+Set pre = ActivePresentation
+
+
+Call deleteAllSlides(pre)
+
+Call saveAsPPT(singlefilename, pre)
 
 Call copySlides(filename1)
 
-Call changeLayout(dividerColor, layoutColor, dividerSlideNumber)
+Call changeLayout(layoutColor, dividerSlideNumber)
 
 Call editShapesInteli
 
 Call moveShapeUp(srtMoveUp, topLimit) '
 
 
-Call deleteAdditionalPattern '
-Call deleteAdditionalPattern2 '
-
-'Call bringTextToFront
+Call deleteAdditionalPattern
+Call deleteAdditionalPattern2
 
 Call checkFooters
 
 ActivePresentation.Save
 
-
 MsgBox "Done"
 
-
 End Sub
 
 
-Sub saveAsPPT(filename1 As String)
-
-With Application.ActivePresentation
-    '.SaveCopyAs "New Format Copy"
-    '.SaveAs ActivePresentation.Path & "\" & filename1 & "-NTTDATA.pptx" ', ppSaveAsPowerPoint4
-    .BuiltInDocumentProperties.Item("title").Value = .Name
-    .SaveAs filename1
-End With
-
-
+Sub saveAsPPT(filename1 As String, pre As Presentation)
+    With pre
+        .BuiltInDocumentProperties.Item("title").Value = .Name
+        .SaveAs filename1
+    End With
 End Sub
 
-Sub deleteAllSlides()
-Dim Pre As Presentation
+Private Sub deleteAllSlides(pre As Presentation)
 Dim x As Long
 
-Set Pre = ActivePresentation
-
-'If Pre.Slides.Count > 1 Then
-    For x = Pre.Slides.Count To 1 Step -1
-        Pre.Slides(x).Delete
+    For x = pre.Slides.Count To 1 Step -1
+        pre.Slides(x).Delete
     Next x
-'End If
-
-'If Pre.Slides.Count < 1 Then
-'   ActivePresentation.Slides.Add Index:=ActivePresentation.Slides.Count + 1, Layout:=ppLayoutCustom
-'
-'End If
 
 End Sub
 
-Sub copySlides(strFilename As String)
-Dim objPresentation As Presentation
-Dim thisPresentation As Presentation
-Dim strProgress As Double
-Dim initSlide As Long
-Dim i As Integer, iCounter As Long
-Dim objSectionProperties As SectionProperties, newSectionProperties As SectionProperties
-
-Set thisPresentation = ActivePresentation
-'open the target presentation
-
-Set objPresentation = Presentations.Open(strFilename)
-
-If objPresentation.Slides.Count < 1 Then Exit Sub 'exit if not enought slides
-
-Set objSectionProperties = objPresentation.SectionProperties
-Set newSectionProperties = thisPresentation.SectionProperties
-
-
-If LCase(ActivePresentation.Slides.Item(1).CustomLayout.Name) = "title" Then 'set init Slide
-  initSlide = 2
-Else
-  initSlide = 1
-End If
-
-initSlide = 1
-
-
-On Error Resume Next
-For i = initSlide To objPresentation.Slides.Count
-
-    '==== Update progress bar ===
-    strProgress = i * 100 / objPresentation.Slides.Count
-    ProgressBarUserForm.ProgressLabel.Caption = "Importing content, " & Round(strProgress, 1) & "%, please wait...."
-    ProgressBarUserForm.ProgressBar.Width = strProgress * 2
-    ProgressBarUserForm.Show
-    DoEvents
-    '==============
-   
-    objPresentation.Slides.Item(i).Copy
+Private Sub copySlides(strFilename As String)
+    Dim objPresentation As Presentation, thisPresentation As Presentation
+    Dim strProgress As Double, initSlide As Long, _
+    i As Integer, iCounter As Long
+    Dim objSectionProperties As SectionProperties, newSectionProperties As SectionProperties
     
-    Call Wait(1.2)
+    Set thisPresentation = ActivePresentation
+    'open the target presentation
     
-    thisPresentation.Slides.Paste
+    Set objPresentation = Presentations.Open(strFilename)
+    
+    If objPresentation.Slides.Count < 1 Then Exit Sub 'exit if not enought slides
+    
+    Set objSectionProperties = objPresentation.SectionProperties
+    Set newSectionProperties = thisPresentation.SectionProperties
+    
+    
+    If LCase(ActivePresentation.Slides.Item(1).CustomLayout.Name) = "title" Then 'set init Slide
+      initSlide = 2
+    Else
+      initSlide = 1
+    End If
+    
+    initSlide = 1
+
+
+    On Error Resume Next
+    For i = initSlide To objPresentation.Slides.Count
+    
+        '==== Update progress bar ===
+        strProgress = i * 100 / objPresentation.Slides.Count
+        ProgressBarUserForm.ProgressLabel.Caption = "Importing content, " & Round(strProgress, 1) & "%, please wait...."
+        ProgressBarUserForm.ProgressBar.Width = strProgress * 2
+        ProgressBarUserForm.Show
+        DoEvents
+        '==============
        
-
-    'Copy notes
-    'thisPresentation.Slides(thisPresentation.Slides.Count).NotesPage.Shapes(2).TextFrame.TextRange = objPresentation.Slides(i).NotesPage.Shapes(2).TextFrame.TextRange 'copy notes
+        objPresentation.Slides.Item(i).Copy
+        
+        Call Wait(1.2)
+        
+        thisPresentation.Slides.Paste
     
-    Presentations.Item(1).Slides.Item(Presentations.Item(1).Slides.Count).Design = _
-        objPresentation.Slides.Item(i).Design
-
+        Presentations.Item(1).Slides.Item(Presentations.Item(1).Slides.Count).Design = _
+            objPresentation.Slides.Item(i).Design
     
-    ''thisPresentation.Application.CommandBars.ExecuteMso ("PasteSourceFormatting")
+    Next i
 
-    'Presentation.Item(1).Slides.Paste
- 
-'    objPresentation.Save
-Next i
-
-'..... Adding sections as well ......
-For iCounter = 1 To objSectionProperties.Count
-    newSectionProperties.AddBeforeSlide objSectionProperties.FirstSlide(iCounter), objSectionProperties.Name(iCounter)
-Next iCounter
-'........................
-
-On Error GoTo 0
-
-objPresentation.Close
-
-thisPresentation.Save
-
-Unload ProgressBarUserForm
+    '..... Adding sections as well ......
+    For iCounter = 1 To objSectionProperties.Count
+        newSectionProperties.AddBeforeSlide objSectionProperties.FirstSlide(iCounter), objSectionProperties.Name(iCounter)
+    Next iCounter
+    '........................
+    
+    On Error GoTo 0
+    
+    objPresentation.Close
+    
+    thisPresentation.Save
+    
+    Unload ProgressBarUserForm
 
 End Sub
 
 
 
-Sub changeLayout(dividerType As Long, layoutType As Long, dividerSlideNumber As Long)
-Dim i As Integer, k As Integer
+Private Sub changeLayout(layoutType As Long, dividerSlideNumber As Long)
+Dim i As Integer, k As Integer, macroPattern As Long
 Dim sourceSlideName As String, targetSlideName As String
 Dim strProgress
-Dim sld As Slide
+Dim sld As Slide, shp As Shape
 Dim shapeArray
-Dim shp As Shape
-Dim macroPattern As Long
 Dim specTxtArray
 
 If layoutType = 1 Then
@@ -214,13 +192,11 @@ For i = 1 To ActivePresentation.Slides.Count
 
     Set sld = ActivePresentation.Slides.Item(i)
     
-    Call changeOnlyShapesColor(sld, layoutType)
+    Call changeOnlyShapesColor(sld)
     
     If i > 1 Then
         Call changeOnlyTextColor(sld, layoutType)
     End If
-    
-    'GoTo changeshape
 
     '==== Update progress bar ===
     strProgress = i * 100 / ActivePresentation.Slides.Count
@@ -233,8 +209,6 @@ For i = 1 To ActivePresentation.Slides.Count
     sourceSlideName = LCase(ActivePresentation.Slides.Item(i).CustomLayout.Name)
     
     shapeArray = getShapeFeatures(sld)
-    
-    
     
     If InStr(sourceSlideName, "title") > 0 Or InStr(sourceSlideName, "cover") > 0 Or InStr(sourceSlideName, "titel") > 0 Then
           
@@ -413,24 +387,14 @@ Select Case targetSlideName
 End Sub
 
 
-Function ShowFileDialog()
-
-On Error Resume Next
-
-ShowFileDialog = ""
-
-    Dim dlgOpen As FileDialog
-
-    Set dlgOpen = Application.FileDialog(Type:=msoFileDialogFilePicker)
-
-    With dlgOpen
+Private Function ShowFileDialog() As String
+    With Application.FileDialog(Type:=msoFileDialogFilePicker)
+        .Title = "Select file to convert"
+        .Filters.Clear
+        .Filters.Add "All PowerPoint Types", "*.pptx;*.ppt;*.pptm;*.ppsx;*.pps;*.ppsm;*.potx;*.pot;*.potm;*.odp"
         .AllowMultiSelect = False
-        .Show
-        ShowFileDialog = dlgOpen.SelectedItems.Item(1)
+        If .Show Then ShowFileDialog = .SelectedItems.Item(1)
     End With
-    
-    
-
 End Function
 Function ShowSaveAsDialog(Optional strFilename As String)
 
@@ -620,345 +584,318 @@ Unload ProgressBarUserForm
 End Sub
 
 Sub bringTextToFront()
-  Dim oShp As Shape
-  Dim oSld As Slide
-  Dim i As Long
+  Dim oShp As Shape, oSld As Slide, i As Long
   Dim sourceSlideName As String
-  
-  
-  
-For i = 1 To ActivePresentation.Slides.Count
 
-
-  '==== Update progress bar ===
-    strProgress = i * 100 / ActivePresentation.Slides.Count
-    ProgressBarUserForm.ProgressLabel.Caption = "Bring text to front, " & Round(strProgress, 1) & "%, please wait...."
-    ProgressBarUserForm.ProgressBar.Width = strProgress * 2
-    ProgressBarUserForm.Show
-    DoEvents
-    '==============
-
-  Set oSld = ActivePresentation.Slides.Item(i)
-  
-  sourceSlideName = LCase(ActivePresentation.Slides.Item(i).CustomLayout.Name)
-  
-
-      '.... bring text to front ...
-    For Each oShp In oSld.Shapes
-         If oShp.HasTextFrame = True Then
-           If Len(oShp.TextFrame.TextRange.Text) > 1 Then
-             oShp.ZOrder msoBringToFront
-           End If
-         End If
-    Next
-    '..........................
-  
-
-Next i
-
-Unload ProgressBarUserForm
+    For i = 1 To ActivePresentation.Slides.Count
+    
+    
+      '==== Update progress bar ===
+        strProgress = i * 100 / ActivePresentation.Slides.Count
+        ProgressBarUserForm.ProgressLabel.Caption = "Bring text to front, " & Round(strProgress, 1) & "%, please wait...."
+        ProgressBarUserForm.ProgressBar.Width = strProgress * 2
+        ProgressBarUserForm.Show
+        DoEvents
+        '==============
+    
+      Set oSld = ActivePresentation.Slides.Item(i)
+      
+      sourceSlideName = LCase(ActivePresentation.Slides.Item(i).CustomLayout.Name)
+      
+    
+          '.... bring text to front ...
+        For Each oShp In oSld.Shapes
+             If oShp.HasTextFrame = True Then
+               If Len(oShp.TextFrame.TextRange.Text) > 1 Then
+                 oShp.ZOrder msoBringToFront
+               End If
+             End If
+        Next
+        '..........................
+      
+    
+    Next i
+    
+    Unload ProgressBarUserForm
 
 End Sub
 
-Function getShapeFeatures(sld As Slide)
-
-Dim shp As Shape
-'Dim sld As Slide
-Dim shapeArray(), counter As Long
-Dim x As Long
-
-'inches x 72 to get points
-counter = 0
-ReDim shapeArray(counter)
-shapeArray(counter) = ""
-
-''Set sld = ActivePresentation.Slides.Item(1)
-
-''Debug.Print ActivePresentation.Slides.Item(1).Shapes("Title 1").Top
-For Each shp In sld.Shapes
-  
-    shp.Name = "Custom Shape Name " & counter
-    ReDim Preserve shapeArray(counter)
-    shapeArray(counter) = shp.Name & ";" & shp.Top & ";" & shp.Left & ";" & shp.Height & ";" & shp.Width
-    'shapeArray(counter) = shp & ";" & shp.Top & ";" & shp.Left & ";" & shp.Height & ";" & shp.Width
-    counter = counter + 1
-  If shp.Type = msoGroup Then
-     
-     For x = 1 To shp.GroupItems.Count
-     'MsgBox shp.GroupItems.Count
-        
-        shp.GroupItems(x).Name = "Custom Shape Name " & counter
+Private Function getShapeFeatures(sld As Slide)
+    Dim shp As Shape
+    Dim shapeArray(), counter As Long
+    Dim x As Long
+    
+    'inches x 72 to get points
+    counter = 0
+    ReDim shapeArray(counter)
+    shapeArray(counter) = ""
+    
+    ''Set sld = ActivePresentation.Slides.Item(1)
+    For Each shp In sld.Shapes
+      
+        shp.Name = "Custom Shape Name " & counter
         ReDim Preserve shapeArray(counter)
-        shapeArray(counter) = shp.GroupItems(x).Name & ";" & shp.GroupItems(x).Top & ";" & shp.GroupItems(x).Left & ";" & shp.GroupItems(x).Height & ";" & shp.GroupItems(x).Width
+        shapeArray(counter) = shp.Name & ";" & shp.Top & ";" & shp.Left & ";" & shp.Height & ";" & shp.Width
+        'shapeArray(counter) = shp & ";" & shp.Top & ";" & shp.Left & ";" & shp.Height & ";" & shp.Width
         counter = counter + 1
-     Next x
-  End If
-Next
-
-getShapeFeatures = shapeArray
-'Debug.Print shapeArray(0)
-
+      If shp.Type = msoGroup Then
+         
+         For x = 1 To shp.GroupItems.Count
+         'MsgBox shp.GroupItems.Count
+            
+            shp.GroupItems(x).Name = "Custom Shape Name " & counter
+            ReDim Preserve shapeArray(counter)
+            shapeArray(counter) = shp.GroupItems(x).Name & ";" & shp.GroupItems(x).Top & ";" & shp.GroupItems(x).Left & ";" & shp.GroupItems(x).Height & ";" & shp.GroupItems(x).Width
+            counter = counter + 1
+         Next x
+      End If
+    Next
+    
+    getShapeFeatures = shapeArray
 End Function
 
 Sub changeFontBulletColor(sld As Slide, layoutType As Long)
-'Dim sld As Slide
-Dim i As Long, j As Long, k As Long
-Dim x As Long
-Dim oTbl
-Dim currentSlideName As String
-Dim rustRedRGB As Long
+        Dim i As Long, j As Long, k As Long
+        Dim x As Long
+        Dim oTbl
+        Dim currentSlideName As String
+        Dim rustRedRGB As Long
+        
+        rustRedRGB = RGB(178, 32, 0)
+        
+        
+        currentSlideName = sld.CustomLayout.Name
+        
+         'Set sld = ActivePresentation.Slides.Item(3)
+         
+        
+        For lShp = sld.Shapes.Count To 1 Step -1
+              With sld.Shapes(lShp)
+                If .HasTextFrame Then
+                   
+                   '....... change blue box that was set by mistake .......
+        '           If .Fill.ForeColor.RGB = RGB(0, 128, 177) Then
+        '              .Fill.ForeColor.RGB = RGB(255, 255, 255)
+        '           End If
+                   '........................................
+                   
+                   '............  Change text color and size ........
+                   If Len(.TextFrame.TextRange.Text) > 1 Then
+        '                .TextFrame.TextRange.Font.Name = "Arial"
+                        For i = 1 To Len(.TextFrame.TextRange.Text)
+                            
+                            If layoutType = 1 Then 'light
+                                .TextFrame.TextRange.Characters(i).Font.Color = getColorConversion(.TextFrame.TextRange.Characters(i).Font.Color.RGB)  '
+                            Else
+                                 .TextFrame.TextRange.Characters(i).Font.Color = getColorConversion(.TextFrame.TextRange.Characters(i).Font.Color.RGB, True) 'Dark Mode
+                            End If
+                           
+                           
+                           '/////   size  /////////
+                           If Mid(LCase(currentSlideName), 1, 7) <> "divider" Then
+                             If .TextFrame.TextRange.Characters(i).Font.Size > 24 Then
+                                '.TextFrame.TextRange.Characters(i).Font.Size = 24
+                             End If
+                           End If
+                           '///////////////////////
+                           
+                        Next
+                   End If
+                   '............................................
+                   
+                   '......... Change bullet color ..................
+                   For i = 1 To .TextFrame.TextRange.Paragraphs.Count
+                     If .TextFrame.TextRange.Paragraphs(i).ParagraphFormat.Bullet.Visible <> 0 Then
+                        .TextFrame.TextRange.Paragraphs(i).ParagraphFormat.Bullet.Font.Color = rustRedRGB
+                     End If
+                   Next i
+                   '.......................................................
+                
+                ElseIf .HasTable Then
+                  Set oTbl = sld.Shapes(lShp).Table
+                    For k = 1 To oTbl.Columns.Count
+                      For j = 1 To oTbl.Rows.Count
+                        
+                        Call changeShapeColor(sld.Shapes(lShp).Table.Cell(j, k).Shape) 'Change cell color
+                        
+                        With oTbl.Cell(j, k).Shape.TextFrame.TextRange
+                          '...... change color text in tables .......
+                          '.Size = 12
+        '                  .Font.Name = "Arial"
+                          For i = 1 To Len(.Text)
+                              .Characters(i).Font.Color = getColorConversion(.Characters(i).Font.Color.RGB) 'Change to Blue
+                          Next i
+                          '.Bold = True
+                          '.....................................
+                          
+                          
+                          '......... Change bullet color ..................
+                          For i = 1 To .Paragraphs.Count
+                              If .Paragraphs(i).ParagraphFormat.Bullet.Visible <> 0 Then
+                                 .Paragraphs(i).ParagraphFormat.Bullet.Font.Color = rustRedRGB ''getColorConversion(.Paragraphs(i).ParagraphFormat.Bullet.Font.Color.RGB)  'Change to Blue
+                              End If
+                          Next i
+                          '.......................................................
+                          
+                          
+                        End With
+                      Next j
+                    Next k
+                           
+                   
+                End If
+                
+                '---- shape color -----
+                Dim oShpNode
+                Dim oNode As SmartArtNode
+                If .HasSmartArt Then
+                   For Each oNode In .SmartArt.Nodes
+                      For Each oShpNode In oNode.Shapes ' As ShapeRange
+                         Call changeShapeColor(oShpNode)
+                      Next
+                   Next
+                End If
+                
+                
+                On Error Resume Next
+                If .HasTable = False Then
+                    If .Type <> msoGroup Then
+                      Call changeShapeColor(sld.Shapes(lShp))
+                    Else
+            
+                       'Debug.Print "GROUP"
+                       For x = 1 To sld.Shapes(lShp).GroupItems.Count
+                           Call changeShapeColor(sld.Shapes(lShp).GroupItems(x))
+                           
+                          
+                           
+                           '****** check for texts*****************
+                           If sld.Shapes(lShp).GroupItems(x).HasTextFrame Then
+                              If Len(sld.Shapes(lShp).GroupItems(x).TextFrame.TextRange.Text) > 1 Then
+                                 For i = 1 To Len(sld.Shapes(lShp).GroupItems(x).TextFrame.TextRange.Text)
+                                    sld.Shapes(lShp).GroupItems(x).TextFrame.TextRange.Characters(i).Font.Color = getColorConversion(sld.Shapes(lShp).GroupItems(x).TextFrame.TextRange.Characters(i).Font.Color.RGB)  'Change to Blue
+                                 Next i
+                              End If
+                              
+                              
+                              '............ Change bullet color ...........................
+                              For i = 1 To sld.Shapes(lShp).GroupItems(x).TextFrame.TextRange.Paragraphs.Count
+                                If sld.Shapes(lShp).GroupItems(x).TextFrame.TextRange.Paragraphs(i).ParagraphFormat.Bullet.Visible <> 0 Then
+                                   sld.Shapes(lShp).GroupItems(x).TextFrame.TextRange.Paragraphs(i).ParagraphFormat.Bullet.Font.Color = rustRedRGB '
+                                End If
+                              Next i
+                              '..........................................................
+                           
+                           End If
+                           '***************************************
+                           
+                           '******* has chart ************
+                           On Error Resume Next
+                           If sld.Shapes(lShp).GroupItems(x).HasChart Then
+                             If sld.Shapes(lShp).GroupItems(x).Chart.ChartType = 51 Then
+                             
+                                ''shp.Chart.SeriesCollection(1).DataLabels.Font.Color = RGB(0, 0, 0)
+                                sld.Shapes(lShp).GroupItems(x).Chart.SeriesCollection(1).Interior.Color = getColorConversion(sld.Shapes(lShp).GroupItems(x).Chart.SeriesCollection(1).Interior.Color)
+                                sld.Shapes(lShp).GroupItems(x).Chart.SeriesCollection(1).Border.Color = getColorConversion(sld.Shapes(lShp).GroupItems(x).Chart.SeriesCollection(1).Border.Color)
+                             End If
+                           End If
+                           On Error GoTo 0
+                           
+                           '******************************
+                           
+                           
+                       Next x
+                    End If
+                End If
+                '--------------------------
+              
+              End With
+        Next
 
-rustRedRGB = RGB(178, 32, 0)
-
-
-currentSlideName = sld.CustomLayout.Name
-
- 'Set sld = ActivePresentation.Slides.Item(3)
+End Sub
  
 
-For lShp = sld.Shapes.Count To 1 Step -1
-      With sld.Shapes(lShp)
-        If .HasTextFrame Then
-           
-           '....... change blue box that was set by mistake .......
-'           If .Fill.ForeColor.RGB = RGB(0, 128, 177) Then
-'              .Fill.ForeColor.RGB = RGB(255, 255, 255)
-'           End If
-           '........................................
-           
-           '............  Change text color and size ........
-           If Len(.TextFrame.TextRange.Text) > 1 Then
-'                .TextFrame.TextRange.Font.Name = "Arial"
-                For i = 1 To Len(.TextFrame.TextRange.Text)
-                    
-                    If layoutType = 1 Then 'light
-                        .TextFrame.TextRange.Characters(i).Font.Color = getColorConversion(.TextFrame.TextRange.Characters(i).Font.Color.RGB)  '
-                    Else
-                         .TextFrame.TextRange.Characters(i).Font.Color = getColorConversion(.TextFrame.TextRange.Characters(i).Font.Color.RGB, True) 'Dark Mode
-                    End If
-                   
-                   
-                   '/////   size  /////////
-                   If Mid(LCase(currentSlideName), 1, 7) <> "divider" Then
-                     If .TextFrame.TextRange.Characters(i).Font.Size > 24 Then
-                        '.TextFrame.TextRange.Characters(i).Font.Size = 24
-                     End If
-                   End If
-                   '///////////////////////
-                   
-                Next
-           End If
-           '............................................
-           
-           '......... Change bullet color ..................
-           For i = 1 To .TextFrame.TextRange.Paragraphs.Count
-             If .TextFrame.TextRange.Paragraphs(i).ParagraphFormat.Bullet.Visible <> 0 Then
-                .TextFrame.TextRange.Paragraphs(i).ParagraphFormat.Bullet.Font.Color = rustRedRGB
-             End If
-           Next i
-           '.......................................................
-        
-        ElseIf .HasTable Then
-          Set oTbl = sld.Shapes(lShp).Table
-            For k = 1 To oTbl.Columns.Count
-              For j = 1 To oTbl.Rows.Count
-                
-                Call changeShapeColor(sld.Shapes(lShp).Table.Cell(j, k).Shape) 'Change cell color
-                
-                With oTbl.Cell(j, k).Shape.TextFrame.TextRange
-                  '...... change color text in tables .......
-                  '.Size = 12
-'                  .Font.Name = "Arial"
-                  For i = 1 To Len(.Text)
-                      .Characters(i).Font.Color = getColorConversion(.Characters(i).Font.Color.RGB) 'Change to Blue
-                  Next i
-                  '.Bold = True
-                  '.....................................
-                  
-                  
-                  '......... Change bullet color ..................
-                  For i = 1 To .Paragraphs.Count
-                      If .Paragraphs(i).ParagraphFormat.Bullet.Visible <> 0 Then
-                         .Paragraphs(i).ParagraphFormat.Bullet.Font.Color = rustRedRGB ''getColorConversion(.Paragraphs(i).ParagraphFormat.Bullet.Font.Color.RGB)  'Change to Blue
-                      End If
-                  Next i
-                  '.......................................................
-                  
-                  
-                End With
-              Next j
-            Next k
-                   
-           
-        End If
-        
-        '---- shape color -----
-        Dim oShpNode
-        Dim oNode As SmartArtNode
-        If .HasSmartArt Then
-           For Each oNode In .SmartArt.Nodes
-              For Each oShpNode In oNode.Shapes ' As ShapeRange
-                 Call changeShapeColor(oShpNode)
-              Next
-           Next
-        End If
-        
-        
-        On Error Resume Next
-        If .HasTable = False Then
-            If .Type <> msoGroup Then
-              Call changeShapeColor(sld.Shapes(lShp))
-            Else
+Private Sub changeOnlyTextColor(sld As Slide, layoutType As Long)
+    Dim i As Long, j As Long, k As Long, x As Long, rustRedRGB As Long
+    Dim oTbl
+    Dim currentSlideName As String
     
-               'Debug.Print "GROUP"
-               For x = 1 To sld.Shapes(lShp).GroupItems.Count
-                   Call changeShapeColor(sld.Shapes(lShp).GroupItems(x))
-                   
-                  
-                   
-                   '****** check for texts*****************
-                   If sld.Shapes(lShp).GroupItems(x).HasTextFrame Then
-                      If Len(sld.Shapes(lShp).GroupItems(x).TextFrame.TextRange.Text) > 1 Then
-                         For i = 1 To Len(sld.Shapes(lShp).GroupItems(x).TextFrame.TextRange.Text)
-                            sld.Shapes(lShp).GroupItems(x).TextFrame.TextRange.Characters(i).Font.Color = getColorConversion(sld.Shapes(lShp).GroupItems(x).TextFrame.TextRange.Characters(i).Font.Color.RGB)  'Change to Blue
-                         Next i
-                      End If
-                      
-                      
-                      '............ Change bullet color ...........................
-                      For i = 1 To sld.Shapes(lShp).GroupItems(x).TextFrame.TextRange.Paragraphs.Count
-                        If sld.Shapes(lShp).GroupItems(x).TextFrame.TextRange.Paragraphs(i).ParagraphFormat.Bullet.Visible <> 0 Then
-                           sld.Shapes(lShp).GroupItems(x).TextFrame.TextRange.Paragraphs(i).ParagraphFormat.Bullet.Font.Color = rustRedRGB '
+    rustRedRGB = RGB(178, 32, 0)
+    
+    currentSlideName = sld.CustomLayout.Name
+    
+    For lShp = sld.Shapes.Count To 1 Step -1
+          With sld.Shapes(lShp)
+            If .HasTextFrame Then
+    
+               
+               '............  Change text color ........
+               If Len(.TextFrame.TextRange.Text) > 1 Then
+    '
+                    For i = 1 To Len(.TextFrame.TextRange.Text)
+                        
+                        If layoutType = 1 Then 'light
+                            .TextFrame.TextRange.Characters(i).Font.Color = getColorConversion(.TextFrame.TextRange.Characters(i).Font.Color.RGB)  '
+                        Else
+                             .TextFrame.TextRange.Characters(i).Font.Color = getColorConversion(.TextFrame.TextRange.Characters(i).Font.Color.RGB, True) 'Dark Mode
                         End If
+                       
+                    Next
+               End If
+               '............................................
+               
+            
+            ElseIf .HasTable Then
+              Set oTbl = sld.Shapes(lShp).Table
+                For k = 1 To oTbl.Columns.Count
+                  For j = 1 To oTbl.Rows.Count
+                 
+                    With oTbl.Cell(j, k).Shape.TextFrame.TextRange
+                      '...... change color text in tables .......
+    
+                      For i = 1 To Len(.Text)
+                          .Characters(i).Font.Color = getColorConversion(.Characters(i).Font.Color.RGB) 'Change to Blue
                       Next i
-                      '..........................................................
-                   
-                   End If
-                   '***************************************
-                   
-                   '******* has chart ************
-                   On Error Resume Next
-                   If sld.Shapes(lShp).GroupItems(x).HasChart Then
-                     If sld.Shapes(lShp).GroupItems(x).Chart.ChartType = 51 Then
-                     
-                        ''shp.Chart.SeriesCollection(1).DataLabels.Font.Color = RGB(0, 0, 0)
-                        sld.Shapes(lShp).GroupItems(x).Chart.SeriesCollection(1).Interior.Color = getColorConversion(sld.Shapes(lShp).GroupItems(x).Chart.SeriesCollection(1).Interior.Color)
-                        sld.Shapes(lShp).GroupItems(x).Chart.SeriesCollection(1).Border.Color = getColorConversion(sld.Shapes(lShp).GroupItems(x).Chart.SeriesCollection(1).Border.Color)
-                     End If
-                   End If
-                   On Error GoTo 0
-                   
-                   '******************************
-                   
-                   
-               Next x
+                      '.Bold = True
+                      '.....................................
+                      
+                    End With
+                  Next j
+                Next k
+                       
+               
             End If
-        End If
-        '--------------------------
-      
-      End With
-Next
- 
- 
-
+            
+            '---- Text color -----
+            On Error Resume Next
+            If .HasTable = False Then
+                   'Debug.Print "GROUP"
+                   For x = 1 To sld.Shapes(lShp).GroupItems.Count
+                       '****** check for texts*****************
+                       If sld.Shapes(lShp).GroupItems(x).HasTextFrame Then
+                          If Len(sld.Shapes(lShp).GroupItems(x).TextFrame.TextRange.Text) > 1 Then
+                             For i = 1 To Len(sld.Shapes(lShp).GroupItems(x).TextFrame.TextRange.Text)
+                                sld.Shapes(lShp).GroupItems(x).TextFrame.TextRange.Characters(i).Font.Color = getColorConversion(sld.Shapes(lShp).GroupItems(x).TextFrame.TextRange.Characters(i).Font.Color.RGB)  'Change to Blue
+                             Next i
+                          End If
+                       End If
+                       '***************************************
+                   Next x
+            End If
+            '--------------------------
+          
+          End With
+    Next
 End Sub
- 
 
-Sub changeOnlyTextColor(sld As Slide, layoutType As Long)
-'Dim sld As Slide
-Dim i As Long, j As Long, k As Long
-Dim x As Long
+Private Sub changeOnlyShapesColor(sld As Slide)
+Dim j As Long, k As Long, x As Long, rustRedRGB As Long
 Dim oTbl
 Dim currentSlideName As String
-Dim rustRedRGB As Long
 
 rustRedRGB = RGB(178, 32, 0)
 
-
 currentSlideName = sld.CustomLayout.Name
-
-
-For lShp = sld.Shapes.Count To 1 Step -1
-      With sld.Shapes(lShp)
-        If .HasTextFrame Then
-
-           
-           '............  Change text color ........
-           If Len(.TextFrame.TextRange.Text) > 1 Then
-'
-                For i = 1 To Len(.TextFrame.TextRange.Text)
-                    
-                    If layoutType = 1 Then 'light
-                        .TextFrame.TextRange.Characters(i).Font.Color = getColorConversion(.TextFrame.TextRange.Characters(i).Font.Color.RGB)  '
-                    Else
-                         .TextFrame.TextRange.Characters(i).Font.Color = getColorConversion(.TextFrame.TextRange.Characters(i).Font.Color.RGB, True) 'Dark Mode
-                    End If
-                   
-                Next
-           End If
-           '............................................
-           
-        
-        ElseIf .HasTable Then
-          Set oTbl = sld.Shapes(lShp).Table
-            For k = 1 To oTbl.Columns.Count
-              For j = 1 To oTbl.Rows.Count
-             
-                With oTbl.Cell(j, k).Shape.TextFrame.TextRange
-                  '...... change color text in tables .......
-
-                  For i = 1 To Len(.Text)
-                      .Characters(i).Font.Color = getColorConversion(.Characters(i).Font.Color.RGB) 'Change to Blue
-                  Next i
-                  '.Bold = True
-                  '.....................................
-                  
-                End With
-              Next j
-            Next k
-                   
-           
-        End If
-        
-        '---- Text color -----
-        On Error Resume Next
-        If .HasTable = False Then
-               'Debug.Print "GROUP"
-               For x = 1 To sld.Shapes(lShp).GroupItems.Count
-                   '****** check for texts*****************
-                   If sld.Shapes(lShp).GroupItems(x).HasTextFrame Then
-                      If Len(sld.Shapes(lShp).GroupItems(x).TextFrame.TextRange.Text) > 1 Then
-                         For i = 1 To Len(sld.Shapes(lShp).GroupItems(x).TextFrame.TextRange.Text)
-                            sld.Shapes(lShp).GroupItems(x).TextFrame.TextRange.Characters(i).Font.Color = getColorConversion(sld.Shapes(lShp).GroupItems(x).TextFrame.TextRange.Characters(i).Font.Color.RGB)  'Change to Blue
-                         Next i
-                      End If
-                   End If
-                   '***************************************
-               Next x
-        End If
-        '--------------------------
-      
-      End With
-Next
- 
- 
-
-End Sub
-
-Sub changeOnlyShapesColor(sld As Slide, layoutType As Long)
-Dim i As Long, j As Long, k As Long
-Dim x As Long
-Dim oTbl
-Dim currentSlideName As String
-Dim rustRedRGB As Long
-
-rustRedRGB = RGB(178, 32, 0)
-
-
-currentSlideName = sld.CustomLayout.Name
-
- 'Set sld = ActivePresentation.Slides.Item(3)
- 
 
 For lShp = sld.Shapes.Count To 1 Step -1
       With sld.Shapes(lShp)
@@ -1019,28 +956,26 @@ End Sub
 
 
 Sub changeShapeColor(oSh)
-
-With oSh
-    On Error GoTo skip1
-    If .Fill.Visible = msoTrue Then
-        If CStr(.Fill.ForeColor.RGB) <> 0 Then
-            .Fill.ForeColor.RGB = getColorConversion(.Fill.ForeColor.RGB)
-            .Fill.BackColor.RGB = getColorConversion(.Fill.BackColor.RGB)
+    With oSh
+        On Error GoTo skip1
+        If .Fill.Visible = msoTrue Then
+            If CStr(.Fill.ForeColor.RGB) <> 0 Then
+                .Fill.ForeColor.RGB = getColorConversion(.Fill.ForeColor.RGB)
+                .Fill.BackColor.RGB = getColorConversion(.Fill.BackColor.RGB)
+            End If
         End If
-    End If
-    
+        
 skip1:
-    On Error GoTo skip2
-    If .Line.Visible = msoTrue Then
-        If CStr(.Line.ForeColor.RGB) <> 0 Then
-            .Line.ForeColor.RGB = getColorConversion(.Line.ForeColor.RGB)
-            '.Line.ForeColor.RGB = .Fill.ForeColor.RGB
+        On Error GoTo skip2
+        If .Line.Visible = msoTrue Then
+            If CStr(.Line.ForeColor.RGB) <> 0 Then
+                .Line.ForeColor.RGB = getColorConversion(.Line.ForeColor.RGB)
+            End If
         End If
-    End If
-    
+        
 skip2:
-
-End With
+    
+    End With
 
 End Sub
 
@@ -1111,46 +1046,34 @@ Next i
 End Function
 
 
-Sub deleteAdditionalPattern()
-Dim layoutNumber As Integer, i As Integer
-Dim maxLayoutNumber As Integer
-
-maxLayoutNumber = 22
-
-layoutNumber = ActivePresentation.Designs(1).SlideMaster.CustomLayouts.Count
-
-If layoutNumber > maxLayoutNumber Then
-  For i = layoutNumber To maxLayoutNumber + 1 Step -1
-     ActivePresentation.Designs(1).SlideMaster.CustomLayouts(i).Delete
-  Next i
-End If
-
-'MsgBox ActivePresentation.Designs(1).SlideMaster.CustomLayouts(1)
-'MsgBox ActivePresentation.Designs(1).SlideMaster.CustomLayouts.Count
+Private Sub deleteAdditionalPattern()
+    Dim layoutNumber As Integer, i As Integer
+    Const maxLayoutNumber = 22
+    
+    layoutNumber = ActivePresentation.Designs(1).SlideMaster.CustomLayouts.Count
+    
+    If layoutNumber > maxLayoutNumber Then
+      For i = layoutNumber To maxLayoutNumber + 1 Step -1
+         ActivePresentation.Designs(1).SlideMaster.CustomLayouts(i).Delete
+      Next i
+    End If
 End Sub
 
-Sub deleteAdditionalPattern2()
-Dim layoutNumber As Integer, i As Integer
-Dim maxLayoutNumber As Integer
-
-maxLayoutNumber = 4
-
-layoutNumber = ActivePresentation.Designs.Count
-
-If layoutNumber > maxLayoutNumber Then
-  For i = layoutNumber To maxLayoutNumber + 1 Step -1
-     ActivePresentation.Designs(i).Delete
-  Next i
-End If
-
-'MsgBox ActivePresentation.Designs(1).SlideMaster.CustomLayouts(1)
-'MsgBox ActivePresentation.Designs(1).SlideMaster.CustomLayouts.Count
+Private Sub deleteAdditionalPattern2()
+    Dim layoutNumber As Integer, i As Integer
+    Const maxLayoutNumber = 4
+    
+    layoutNumber = ActivePresentation.Designs.Count
+    
+    If layoutNumber > maxLayoutNumber Then
+      For i = layoutNumber To maxLayoutNumber + 1 Step -1
+         ActivePresentation.Designs(i).Delete
+      Next i
+    End If
 End Sub
 
 Sub checkFooters()
-  Dim oSld As Slide
-  Dim i As Long
-  Dim sourceSlideName As String
+  Dim oSld As Slide, i As Long, sourceSlideName As String
   
   
   On Error Resume Next
@@ -1178,8 +1101,6 @@ For i = 1 To ActivePresentation.Slides.Count
     
         .Footer.Visible = True
     
-        '.Footer.Text = "Regional Sales"
-    
         .SlideNumber.Visible = True
     
         .DateAndTime.Visible = True
@@ -1187,11 +1108,8 @@ For i = 1 To ActivePresentation.Slides.Count
         .DateAndTime.UseFormat = True
     
         .DateAndTime.Format = ppDateTimeMdyy
-    
     End With
-    
     ''............
-  
 
 Next i
 
@@ -1217,11 +1135,6 @@ If shapeArray(0) <> "" Then
       If sld.Shapes(shapeFeatures(0)).Top <= 500 Then   'do not change footers
          
         If sld.Shapes(shapeFeatures(0)).Top < 20 And sld.Shapes(shapeFeatures(0)).Width > 850 Then GoTo nextshape  'do not change  titles
-      
-'           sld.Shapes(shapeFeatures(0)).TextFrame2.AutoSize = 2 'do not autosize
-'           sld.Shapes(shapeFeatures(0)).TextFrame2.TextRange.ParagraphFormat.SpaceBefore = 1
-'           sld.Shapes(shapeFeatures(0)).TextFrame2.TextRange.ParagraphFormat.SpaceWithin = 1
-'           sld.Shapes(shapeFeatures(0)).TextFrame2.TextRange.ParagraphFormat.SpaceAfter = 1
       
         sld.Shapes(shapeFeatures(0)).Top = shapeFeatures(1)
         sld.Shapes(shapeFeatures(0)).Left = shapeFeatures(2)
@@ -1276,56 +1189,38 @@ For Each shp In sld.Shapes
         End If
     
     End If
-  
 
 Next
-
 getLowestCustomName = auxString
 End Function
 
-
-
-Sub changeBullets12Numbers(sld As Slide)
+Private Sub changeBullets12Numbers(sld As Slide)
 Dim i As Long
 
 On Error Resume Next
-
-
-For lShp = sld.Shapes.Count To 1 Step -1
-
-   With sld.Shapes(lShp)
-
-           For i = 1 To .TextFrame.TextRange.Paragraphs.Count
-             If .TextFrame.TextRange.Paragraphs(i).ParagraphFormat.Bullet.Visible <> 0 Then
-               
-               With .TextFrame.TextRange.Paragraphs(i).ParagraphFormat.Bullet
-                  
-                  '.Character = 8226
-                  .Type = 2
-               End With
-             End If
-           Next i
-
-  End With
-Next
-
-
+    For lShp = sld.Shapes.Count To 1 Step -1
+    
+       With sld.Shapes(lShp)
+    
+               For i = 1 To .TextFrame.TextRange.Paragraphs.Count
+                 If .TextFrame.TextRange.Paragraphs(i).ParagraphFormat.Bullet.Visible <> 0 Then
+                   
+                   With .TextFrame.TextRange.Paragraphs(i).ParagraphFormat.Bullet
+    
+                      .Type = 2
+                   End With
+                 End If
+               Next i
+    
+      End With
+    Next
 End Sub
 
-Function getStrSeparator1()
-
-getStrSeparator1 = "->"
-
-End Function
-
-Sub deleteOnlyPicturesInSlide(sld As Slide)
-Dim shp As Shape
-
-For Each shp In sld.Shapes
-   If shp.HasTextFrame = False Then
-     shp.Delete
-   End If
-Next
-
-
+Private Sub deleteOnlyPicturesInSlide(sld As Slide)
+    Dim shp As Shape
+    For Each shp In sld.Shapes
+       If Not shp.HasTextFrame Then
+         shp.Delete
+       End If
+    Next
 End Sub

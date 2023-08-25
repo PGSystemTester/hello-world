@@ -28,8 +28,6 @@ DividerLayoutComboBox1.ListIndex = 0
 
 End Sub
 
-
-
 Private Sub CommandButton1_Click()
 
 '-----input validation
@@ -52,26 +50,12 @@ End
 End Sub
 
 
-
-
-
 Private Sub UserForm_Initialize()
-Dim i As Long
 
 '----- Fill in combobox  -------
 
 ColorFooterComboBox1.List = Array("Light", "Dark")
 ColorFooterComboBox1.ListIndex = 0
 
-'For i = 1 To 11
-'
-'''DividerLayoutComboBox1.AddItem Replace(Replace(ActivePresentation.Designs(8).SlideMaster.CustomLayouts(i).Name, "Divider - ", ""), "Macro", "")
-'DividerLayoutComboBox1.AddItem Replace(ActivePresentation.Designs(2).SlideMaster.CustomLayouts(i).Name, "Divider - ", "")
-'
-'Next i
-'DividerLayoutComboBox1.ListIndex = 3
-
-
-'---------------------------------
 
 End Sub
